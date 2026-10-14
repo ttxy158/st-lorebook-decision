@@ -31,6 +31,14 @@
 https://github.com/ttxy158/st-lorebook-decision
 ```
 
+国内直连 GitHub 不通的话换这个（同一份代码的镜像，手动同步，可能比 GitHub 晚一点）：
+
+```
+https://gitee.com/txytxy/st-lorebook-decision
+```
+
+⚠️ 这一步是**酒馆在你电脑上执行 `git clone`**，不是你浏览器下载网页，所以「GitHub 我打得开啊」和「装不上」可以同时成立——git 用的是另一套代理设置。报 `Internal Server Error` 就去酒馆那个命令行窗口找 `Importing extension failed` 那行，十有八九是 `Connection was reset`：换上面那个 Gitee 地址，或者给 git 单独配一次代理（`git config --global http.https://github.com.proxy http://127.0.0.1:代理端口`，撤销用 `--global --unset` 同一路径）。
+
 装完重启 ST（不是刷新页面，是重启进程）。以后更新同一入口点「更新」即可。
 
 ### 方式二：手动放文件
@@ -52,9 +60,9 @@ data/default-user/extensions/st-lorebook-decision
 手机没有文件管理器、也不给 root，所以全部走命令行。插件落点仍是 `<酒馆目录>/data/default-user/extensions/st-lorebook-decision`——按官方 Termux 指南装的话酒馆家目录就是 `~/SillyTavern`，不确定的话跑一句 `ls ~` 看一眼。
 
 - **推荐仍用方式一**（在浏览器里的 ST 界面粘贴仓库地址让它自己装），手机上这个入口和电脑上一样，全程不用碰路径。
-- 非要手动放：`git clone` 到扩展目录下。
+- 非要手动放：`git clone` 到扩展目录下（`github.com` 那个不通就换下面这个 Gitee 地址，两条命令除地址外一样）。
   ```
-  git clone https://github.com/ttxy158/st-lorebook-decision ~/SillyTavern/data/default-user/extensions/st-lorebook-decision
+  git clone https://gitee.com/txytxy/st-lorebook-decision ~/SillyTavern/data/default-user/extensions/st-lorebook-decision
   ```
   酒馆装在别处就把前面的 `~/SillyTavern` 换成你的目录。
 - 装完重启 ST 进程：跑着 `StartServer.sh` 的那个 Termux 窗口按 `Ctrl+C` 停掉，再重新执行一次启动命令。
@@ -140,6 +148,7 @@ data/default-user/extensions/st-lorebook-decision
 
 | 现象 | 原因 |
 | --- | --- |
+| 「安装扩展」报 `Internal Server Error` | 酒馆自己跑 `git clone` 失败了，跟插件无关。看命令行窗口那行 `Importing extension failed`：`Connection was reset` 就是直连 GitHub 不通，换 Gitee 地址或给 git 配代理。 |
 | `403 Forbidden`／报错写着「本机酒馆的同源转发没打开」 | `enableCorsProxy` 没开或没重启进程。这是本机 ST 的 CSRF 挡的，跟百炼无关——所以「测试连通」会弹出一句能照着做的修法（电脑上双击那个 `.bat`，手机上长按复制那条 `bash` 命令）。改完还是 403，就确认你重启的是 ST **进程**，不是刷新页面。 |
 | 对端真回的 403（响应是 JSON，提到 API key） | Key 不对或被禁用，跟上面那条开关无关。换 Key 或去控制台看这个 Key 有没有开通这个模型。 |
 | `400`，提到 `questions ... limit of 16` | 单批条数超过接口硬上限。默认值 16 是对的，别往大填。 |
