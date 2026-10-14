@@ -38,7 +38,7 @@ function toFactory(path, deps) {
 // ============================================================ 1. 请求层（无依赖，直接跑真代码）
 console.log('===== 1. decisionApiService =====');
 const svc = toFactory('services/decisionApiService.js', {
-    __exports: ['DECISION_DEFAULT_MODEL', 'DECISION_MAX_QUESTIONS', 'DECISION_MAX_IN_FLIGHT', 'DEFAULT_INSTRUCTION_TEMPLATE', 'DEFAULT_PENDING_NOTE', 'DEFAULT_DECISION_TASK_BRIEFING', 'DEFAULT_BASIS_SYSTEM_PROMPT', 'DEFAULT_BASIS_TEMPLATE', 'resolveTaskBriefing', 'renderInstruction', 'entryTitle', 'buildEntryDigest', 'buildQuestions', 'buildState', 'buildDigestState', 'isModerationRejection', 'chunk', 'mergeAnswers', 'parseAnswers', 'applyInjectQuota', 'resolveEndpoint', 'requestDecision'],
+    __exports: ['DECISION_DEFAULT_MODEL', 'DECISION_MAX_QUESTIONS', 'DECISION_MAX_IN_FLIGHT', 'DEFAULT_INSTRUCTION_TEMPLATE', 'DEFAULT_PENDING_NOTE', 'DEFAULT_DECISION_TASK_BRIEFING', 'DEFAULT_BASIS_SYSTEM_PROMPT', 'DEFAULT_BASIS_TEMPLATE', 'resolveTaskBriefing', 'renderInstruction', 'entryTitle', 'buildEntryDigest', 'buildQuestions', 'buildState', 'buildDigestState', 'isModerationRejection', 'isHtmlErrorPage', 'proxyFixCommand', 'describeProxyNotEnabled', 'isProxyNotEnabled', 'PROXY_NOT_ENABLED_HEAD', 'chunk', 'mergeAnswers', 'parseAnswers', 'applyInjectQuota', 'resolveEndpoint', 'requestDecision'],
     fetch: (...args) => globalThis.__fakeFetch(...args),
     AbortController: globalThis.AbortController,
     setTimeout: globalThis.setTimeout,
@@ -321,6 +321,36 @@ check('中文站的「敏感内容」也认', svc.isModerationRejection('决策�
 check('必须先有「返回 HTTP 状态码」：光在别处出现 inappropriate content 不算',
     svc.isModerationRejection('我在 inappropriate content 相关设置里报了个错'), false);
 check('空值不炸', svc.isModerationRejection(undefined), false);
+
+// ---- 「本机同源转发没打开」的识别：enableCorsProxy 为 false 时，POST /proxy 会被酒馆自己的 CSRF 中间件挡下，
+// ---- 回的是一整页 Express 错误页；对端（百炼）的错误一律是 JSON。状态 403 + 响应体是 HTML = 自家开关没开。
+const EXPRESS_403 = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>Error</title>\n</head>\n<body>\n<pre>Forbidden</pre>\n</body>\n</html>';
+truthy('酒馆自己的 HTML 错误页认得出来', svc.isHtmlErrorPage(EXPRESS_403));
+truthy('只有一小截 html 标签也算', svc.isHtmlErrorPage('<html><body>nope</body></html>'));
+check('百炼的 JSON 错误页不算 HTML', svc.isHtmlErrorPage('{"code":"DataInspectionFailed","message":"<400> InternalError.Algo.DataInspectionFailed"}'), false);
+check('空值不炸', svc.isHtmlErrorPage(undefined), false);
+
+cap = await captureFetch(() => ({ ok: false, status: 403, text: async () => EXPRESS_403 }));
+truthy('403 + HTML 页 → 说人话，直指转发开关', /本机酒馆的同源转发没打开/.test(cap.error?.message || ''));
+truthy('电脑环境下给的是那个 .bat', /\.bat/.test(cap.error?.message || ''));
+check('转发没开不算「内容被过滤」（换依据也没用，得先开开关）', svc.isModerationRejection(cap.error?.message || ''), false);
+cap = await captureFetch(() => ({ ok: false, status: 403, text: async () => '{"error":{"message":"Incorrect API key provided."}}' }));
+truthy('对端真回的 403 仍原样带出报文', /决策模型返回 HTTP 403：\{"error"/.test(cap.error?.message || ''));
+
+const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
+const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+truthy('手机上改成 Termux 那句 .sh', /enable-cors-proxy\.sh/.test(svc.describeProxyNotEnabled(ANDROID_UA)));
+check('手机上不提电脑上的双击', /\.bat/.test(svc.describeProxyNotEnabled(ANDROID_UA)), false);
+truthy('电脑上还是 .bat', /enable-cors-proxy\.bat/.test(svc.describeProxyNotEnabled(WINDOWS_UA)));
+check('电脑上没有能整行粘贴的命令', svc.proxyFixCommand(WINDOWS_UA), '');
+check('弹窗里那行命令自己找脚本，不写死酒馆装在哪',
+    svc.proxyFixCommand(ANDROID_UA),
+    String.raw`bash "$(find ~ \( -type d \( -name node_modules -o -name .git -o -name storage \) -prune \) -o \( -type f -path '*/st-lorebook-decision/tools/enable-cors-proxy.sh' -print \) 2>/dev/null | head -n1)"`);
+truthy('说明里带同一条命令（toast 不能选中的时候也能抄）', svc.describeProxyNotEnabled(ANDROID_UA).includes(svc.proxyFixCommand(ANDROID_UA)));
+truthy('转发没开这一类认得出来', svc.isProxyNotEnabled(`决策模型返回 HTTP 403：${svc.describeProxyNotEnabled(WINDOWS_UA)}`));
+check('拒答不算转发没开', svc.isProxyNotEnabled(MODERATED), false);
+check('超时不算转发没开', svc.isProxyNotEnabled('决策模型请求超时（15 秒）'), false);
+check('空值不炸', svc.isProxyNotEnabled(undefined), false);
 
 // ============================================================ 1.5 密钥可用性校验
 console.log('\n===== 1.5 isUsableSecret =====');

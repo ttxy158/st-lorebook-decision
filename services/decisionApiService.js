@@ -367,6 +367,65 @@ export function isModerationRejection(message) {
     return MODERATION_NEEDLES.some(needle => text.includes(needle));
 }
 
+export const PROXY_NOT_ENABLED_HEAD = '本机酒馆的同源转发没打开';
+
+// Termux 上那条可粘贴命令：不写死酒馆装在哪，让命令自己按插件目录名把脚本找出来。
+// 无 root 的手机上，用 pkg 装的酒馆一定在 ~ 下面（~/SillyTavern），所以从 ~ 找能命中；
+// 脚本自己是向上找 config.yaml 的，所以只要这一句命中，后面它就知道该改哪个 config。
+// 跳过 node_modules／.git／storage：前两者又大又慢，storage 是软链接到共享存储、几万个文件白扫一遍。
+const PROXY_FIND = String.raw`find ~ \( -type d \( -name node_modules -o -name .git -o -name storage \) -prune \) -o \( -type f -path '*/st-lorebook-decision/tools/enable-cors-proxy.sh' -print \) 2>/dev/null | head -n1`;
+
+// enableCorsProxy 为 false 时，酒馆的 CSRF 中间件排在 /proxy 路由前面，POST 在半路就被本机挡下，
+// 回的是一整页 Express 默认错误页；而百炼的错误一律是 JSON（实测 401 {"error":…}、400 {"code":"DataInspectionFailed"…}）。
+// 所以「状态 403 + 响应体是 HTML」这两条合起来足够把「自家转发没开」和「对端拒绝」分开。
+const HTML_PAGE_MARKERS = ['<!doctype', '<html', '<body'];
+
+function readUserAgent(userAgent) {
+    return String(userAgent ?? (typeof navigator !== 'undefined' ? navigator?.userAgent : '') ?? '');
+}
+
+/**
+ * 这段响应体是不是一整页 HTML 错误页
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isHtmlErrorPage(text) {
+    const head = String(text ?? '').slice(0, 300).toLowerCase();
+    return HTML_PAGE_MARKERS.some(marker => head.includes(marker));
+}
+
+/**
+ * 手机上能直接粘贴执行的那条命令；电脑上给的是双击，没有命令可复制就返回空
+ * @param {string} [userAgent]
+ * @returns {string}
+ */
+export function proxyFixCommand(userAgent) {
+    if (!/android/i.test(readUserAgent(userAgent))) return '';
+    return `bash "$(${PROXY_FIND})"`;
+}
+
+/**
+ * 转发没开该怎么修——一句人话加修法
+ * @param {string} [userAgent] 浏览器 UA，缺省时读当前环境
+ * @returns {string}
+ */
+export function describeProxyNotEnabled(userAgent) {
+    const ua = readUserAgent(userAgent);
+    const fix = /android/i.test(ua)
+        ? `在 Termux 里粘这一句跑一下（它会自己找到插件里的脚本，找的过程可能要等两三秒）：${proxyFixCommand(ua)}，跑完重启酒馆。`
+        : '双击插件目录里的 tools\\enable-cors-proxy.bat，然后重启酒馆。';
+    return `${PROXY_NOT_ENABLED_HEAD}，请求还没发出去就被酒馆自己挡下了（不是接口地址或 Key 的问题）。${fix}`;
+}
+
+/**
+ * 这句错误是不是「本机酒馆的转发没打开」
+ * @param {string} message 错误消息（requestDecision 抛出的那句）
+ * @returns {boolean}
+ */
+export function isProxyNotEnabled(message) {
+    return String(message ?? '').includes(PROXY_NOT_ENABLED_HEAD);
+}
+
 /**
  * 发一次决策请求
  * @param {{endpoint: string, apiKey?: string, model?: string, state: string, questions: object, useProxy?: boolean, timeoutMs?: number}} options
@@ -387,7 +446,12 @@ export async function requestDecision({ endpoint, apiKey = '', model = DECISION_
             body: JSON.stringify({ model, state, questions }),
         });
         const text = await response.text();
-        if (!response.ok) throw new Error(`决策模型返回 HTTP ${response.status}：${text.slice(0, 200)}`);
+        if (!response.ok) {
+            if (useProxy && response.status === 403 && isHtmlErrorPage(text)) {
+                throw new Error(`决策模型返回 HTTP 403：${describeProxyNotEnabled()}`);
+            }
+            throw new Error(`决策模型返回 HTTP ${response.status}：${text.slice(0, 200)}`);
+        }
         let data;
         try {
             data = JSON.parse(text);

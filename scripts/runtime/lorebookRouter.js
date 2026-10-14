@@ -29,6 +29,8 @@ import {
     entryTitle,
     chunk,
     isModerationRejection,
+    isProxyNotEnabled,
+    proxyFixCommand,
     mergeAnswers,
     parseAnswers,
     applyInjectQuota,
@@ -1050,7 +1052,22 @@ export async function testDecisionConnection() {
         console.log('[决策路由] 测试结果', data);
     } catch (error) {
         console.error('[决策路由] 测试失败', error);
-        EDITOR.error(`测试失败：${error.message}`);
+        const message = String(error?.message || error);
+        // 转发没开这一类值得弹窗：修法是一条命令，toast 里根本没法复制
+        if (isProxyNotEnabled(message)) {
+            const command = proxyFixCommand();
+            await new EDITOR.Popup(`
+<div class="wide100p padding5" style="display:flex;flex-direction:column;gap:8px;">
+    <div class="justifyLeft">${escapeHtml(message)}</div>
+    ${command ? `<pre class="decision-proxy-command">${escapeHtml(command)}</pre>
+    <small class="toggle-description justifyLeft">点上面那行会整行选中，复制后粘到 Termux 里执行，跑完重启酒馆。</small>` : ''}
+</div>
+<style>
+    .decision-proxy-command { white-space: pre-wrap; word-break: break-all; user-select: all; font-size: 12px; text-align: left; padding: 6px 8px; border-radius: 4px; background: var(--SmartThemeBlurTintColor); }
+</style>`, EDITOR.POPUP_TYPE.TEXT, '我知道了').show();
+            return;
+        }
+        EDITOR.error(`测试失败：${message}`);
     }
 }
 
