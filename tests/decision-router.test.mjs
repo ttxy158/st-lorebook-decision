@@ -38,7 +38,7 @@ function toFactory(path, deps) {
 // ============================================================ 1. 请求层（无依赖，直接跑真代码）
 console.log('===== 1. decisionApiService =====');
 const svc = toFactory('services/decisionApiService.js', {
-    __exports: ['DECISION_DEFAULT_MODEL', 'DECISION_MAX_QUESTIONS', 'DECISION_MAX_IN_FLIGHT', 'DEFAULT_INSTRUCTION_TEMPLATE', 'DEFAULT_PENDING_NOTE', 'DEFAULT_DECISION_TASK_BRIEFING', 'DEFAULT_BASIS_SYSTEM_PROMPT', 'DEFAULT_BASIS_TEMPLATE', 'resolveTaskBriefing', 'renderInstruction', 'entryTitle', 'buildEntryDigest', 'buildQuestions', 'buildState', 'buildDigestState', 'isModerationRejection', 'isHtmlErrorPage', 'proxyFixCommand', 'proxySelfCheckUrl', 'describeProxyNotEnabled', 'isProxyNotEnabled', 'isProxyNotEnabledResponse', 'PROXY_NOT_ENABLED_HEAD', 'PROXY_DISABLED_SENTENCE', 'PROXY_SELF_CHECK_PATH', 'chunk', 'mergeAnswers', 'parseAnswers', 'applyInjectQuota', 'resolveEndpoint', 'requestDecision'],
+    __exports: ['DECISION_DEFAULT_MODEL', 'DECISION_MAX_QUESTIONS', 'DECISION_MAX_IN_FLIGHT', 'DEFAULT_INSTRUCTION_TEMPLATE', 'DEFAULT_PENDING_NOTE', 'DEFAULT_DECISION_TASK_BRIEFING', 'DEFAULT_BASIS_SYSTEM_PROMPT', 'DEFAULT_BASIS_TEMPLATE', 'resolveTaskBriefing', 'renderInstruction', 'entryTitle', 'buildEntryDigest', 'buildQuestions', 'buildState', 'buildDigestState', 'isModerationRejection', 'isHtmlErrorPage', 'proxyFixCommand', 'proxyManualEditCommand', 'proxySelfCheckUrl', 'describeProxyNotEnabled', 'isProxyNotEnabled', 'isProxyNotEnabledResponse', 'PROXY_NOT_ENABLED_HEAD', 'PROXY_DISABLED_SENTENCE', 'PROXY_SELF_CHECK_PATH', 'chunk', 'mergeAnswers', 'parseAnswers', 'applyInjectQuota', 'resolveEndpoint', 'requestDecision'],
     fetch: (...args) => globalThis.__fakeFetch(...args),
     AbortController: globalThis.AbortController,
     setTimeout: globalThis.setTimeout,
@@ -348,6 +348,11 @@ check('弹窗里那行命令自己找脚本，不写死酒馆装在哪',
     svc.proxyFixCommand(ANDROID_UA),
     String.raw`bash "$(find ~ \( -type d \( -name node_modules -o -name .git -o -name storage \) -prune \) -o \( -type f -path '*/st-lorebook-decision/tools/enable-cors-proxy.sh' -print \) 2>/dev/null | head -n1)"`);
 truthy('说明里带同一条命令（toast 不能选中的时候也能抄）', svc.describeProxyNotEnabled(ANDROID_UA).includes(svc.proxyFixCommand(ANDROID_UA)));
+check('电脑上没有可粘的手改命令（那边是用记事本改文件）', svc.proxyManualEditCommand(WINDOWS_UA), '');
+check('手机上手改就是那条 sed，不跑脚本也能改',
+    svc.proxyManualEditCommand(ANDROID_UA),
+    String.raw`sed -i 's/^enableCorsProxy.*/enableCorsProxy: true/' ~/SillyTavern/config.yaml`);
+truthy('手机说明里也带手改那句（toast 里不能选中时也能抄）', svc.describeProxyNotEnabled(ANDROID_UA).includes(svc.proxyManualEditCommand(ANDROID_UA)));
 truthy('转发没开这一类认得出来', svc.isProxyNotEnabled(`决策模型返回 HTTP 403：${svc.describeProxyNotEnabled(WINDOWS_UA)}`));
 check('拒答不算转发没开', svc.isProxyNotEnabled(MODERATED), false);
 check('超时不算转发没开', svc.isProxyNotEnabled('决策模型请求超时（15 秒）'), false);
@@ -382,12 +387,15 @@ check('这种回执不算「内容被过滤」', svc.isModerationRejection(cap.e
 // 提示里必须自带完整三步：改哪里、非重启不可、怎么自证
 const DESKTOP_HINT = svc.describeProxyNotEnabled(WINDOWS_UA, 'http://127.0.0.1:8000');
 truthy('写了改哪个文件（.bat）', /enable-cors-proxy\.bat/.test(DESKTOP_HINT));
+truthy('电脑上也给了不用脚本的改法：文件在哪、改哪一行', /记事本/.test(DESKTOP_HINT) && /server\.js/.test(DESKTOP_HINT) && /enableCorsProxy: false 这一行改成 true/.test(DESKTOP_HINT));
 truthy('写了不重启等于没改', /重启/.test(DESKTOP_HINT) && /只在进程启动时读一次/.test(DESKTOP_HINT));
 truthy('写了刷新页面没用（他就是栽在这一步：改了配置但进程是改之前起的）', /刷新页面没用/.test(DESKTOP_HINT));
 truthy('写了自证地址', DESKTOP_HINT.includes(svc.proxySelfCheckUrl('http://127.0.0.1:8000')));
 truthy('自证那句说清两种结果各代表什么', /example\.com/.test(DESKTOP_HINT) && DESKTOP_HINT.includes(svc.PROXY_DISABLED_SENTENCE));
 const PHONE_HINT = svc.describeProxyNotEnabled(ANDROID_UA, 'http://127.0.0.1:8080');
 truthy('手机上第①步是 Termux 那句命令', PHONE_HINT.includes(svc.proxyFixCommand(ANDROID_UA)));
+truthy('手机上第①步明说两条路都给了（脚本 / 直接改文件）', /两条路/.test(PHONE_HINT) && PHONE_HINT.includes(svc.proxyManualEditCommand(ANDROID_UA)));
+truthy('手机上那句 sed 点明默认路径可能得换', /~\/SillyTavern/.test(PHONE_HINT) && /装在别处/.test(PHONE_HINT));
 truthy('手机上第②步是 Ctrl+C 再起服务', /Ctrl\+C/.test(PHONE_HINT) && /node server\.js/.test(PHONE_HINT));
 check('手机上不提电脑上的双击', /\.bat/.test(PHONE_HINT), false);
 check('拿不到当前站点时不硬凑自证地址', /浏览器地址栏/.test(svc.describeProxyNotEnabled(WINDOWS_UA, '')), false);
@@ -615,6 +623,11 @@ function makeRouter(over = {}) {
         buildState: svc.buildState,
         buildDigestState: svc.buildDigestState,
         isModerationRejection: svc.isModerationRejection,
+        // 转发没开时的弹窗要按平台给命令，所以这几个也得从真模块拿
+        isProxyNotEnabled: svc.isProxyNotEnabled,
+        proxyFixCommand: svc.proxyFixCommand,
+        proxyManualEditCommand: svc.proxyManualEditCommand,
+        proxySelfCheckUrl: svc.proxySelfCheckUrl,
         resolveTaskBriefing: svc.resolveTaskBriefing,
         entryTitle: svc.entryTitle,
         // 依据来源与时机：默认「正文 + 每轮都判」，各用例用 over.setting 单独改档
@@ -1273,6 +1286,42 @@ await testedCustom.router.testDecisionConnection();
 check('连通测试也按你写的问法发，不然测的是默认措辞',
     Object.values(testedCustom.calls.last.questions).map(q => q.instructions),
     ['是否提到了测试条目甲？', '是否提到了测试条目乙？']);
+
+// ---- 转发没开时的弹窗：手机要同时给「脚本」和「手改」两条命令，电脑只给自证那一条
+// 弹窗里那几行读的是当前环境的 navigator / location，所以只能临时把它们换上去再跑
+function withEnv(env, run) {
+    const saved = [
+        ['navigator', Object.getOwnPropertyDescriptor(globalThis, 'navigator')],
+        ['location', Object.getOwnPropertyDescriptor(globalThis, 'location')],
+    ];
+    Object.defineProperty(globalThis, 'navigator', { value: { userAgent: env.userAgent }, configurable: true });
+    Object.defineProperty(globalThis, 'location', { value: { origin: env.origin }, configurable: true });
+    return (async () => {
+        try { return await run(); } finally {
+            for (const [name, desc] of saved) {
+                if (desc) Object.defineProperty(globalThis, name, desc); else delete globalThis[name];
+            }
+        }
+    })();
+}
+async function proxyFailPopup(userAgent) {
+    return withEnv({ userAgent, origin: 'http://127.0.0.1:8000' }, async () => {
+        const message = `决策模型返回 HTTP 404：${svc.describeProxyNotEnabled()}`;
+        const t = makeRouter({ fail: message });
+        await t.router.testDecisionConnection();
+        return String(t.log.popupHtml || '');
+    });
+}
+const phoneProxyPopup = await proxyFailPopup(ANDROID_UA);
+const desktopProxyPopup = await proxyFailPopup(WINDOWS_UA);
+// 那句 find 命令里的 2>/dev/null 进 HTML 会被转义，所以只挑两段没特殊字符的一起认，别整串比
+truthy('手机弹窗把脚本那条做成可整行选中的灰底行', /decision-proxy-command/.test(phoneProxyPopup) && phoneProxyPopup.includes('bash "$(') && phoneProxyPopup.includes('enable-cors-proxy.sh'));
+truthy('手机弹窗另外单给一条不跑脚本的 sed', phoneProxyPopup.includes(svc.proxyManualEditCommand(ANDROID_UA)));
+truthy('手机弹窗也有自证地址那一行', phoneProxyPopup.includes('http://127.0.0.1:8000/proxy/https://example.com/'));
+check('手机弹窗三行各有自己的说明，不至于分不清抄哪条', (phoneProxyPopup.match(/toggle-description/g) || []).length, 4);
+check('电脑弹窗不给 sed（那边不是 Termux）', desktopProxyPopup.includes(svc.proxyManualEditCommand(ANDROID_UA)), false);
+truthy('电脑弹窗还是给自证地址', desktopProxyPopup.includes('http://127.0.0.1:8000/proxy/https://example.com/'));
+truthy('电脑弹窗里也写了用记事本改文件', /记事本/.test(desktopProxyPopup));
 
 // ---- showDecisionReport 不炸
 await router.showDecisionReport();

@@ -84,7 +84,11 @@ data/default-user/extensions/st-lorebook-decision
      ```
      嫌它慢就直接 `cd` 进插件的 `tools` 目录跑 `bash enable-cors-proxy.sh`。
    - 两个脚本都是向上找 12 层里的「同时有 `config.yaml` 和 `server.js` 的那个目录」，所以从插件目录直接跑就行；已经是 `true` 会告诉你就地停下，键不存在则补在文件末尾。
-   - 不想用脚本：自己开 `config.yaml` 改那一个键也可以，改完必须重启进程。
+   - 不想用脚本：自己开 `config.yaml` 改那一个键也可以。电脑上用记事本打开「有 `server.js` 和 `Start.bat` 的那个文件夹」里的 `config.yaml`，把 `enableCorsProxy: false` 这一行改成 `true` 保存；手机上粘这一行（默认酒馆在 `~/SillyTavern`，装在别处把路径换掉）：
+     ```
+     sed -i 's/^enableCorsProxy.*/enableCorsProxy: true/' ~/SillyTavern/config.yaml
+     ```
+     不管用哪种改法，改完都必须重启进程。
 2. **打开设置**：底部魔法棒菜单 →「决策索引工作台」→ 右上角齿轮 → 展开第①类「接管与连通」。
 3. **填接口地址**：控制台里那个模型的详情页 → OpenAI 兼容地址，填到 `/compatible-mode/v1` 为止就行，插件自己补后面的 `/systemone`。
    示例：`https://dashscope.aliyuncs.com/compatible-mode/v1`
@@ -149,7 +153,7 @@ data/default-user/extensions/st-lorebook-decision
 | 现象 | 原因 |
 | --- | --- |
 | 「安装扩展」报 `Internal Server Error` | 酒馆自己跑 `git clone` 失败了，跟插件无关。看命令行窗口那行 `Importing extension failed`：`Connection was reset` 就是直连 GitHub 不通，换 Gitee 地址或给 git 配代理。 |
-| `403 Forbidden`／报错写着「本机酒馆的同源转发没打开」 | `enableCorsProxy` 没开或没重启进程。这是本机 ST 的 CSRF 挡的，跟百炼无关——所以「测试连通」会弹出一句能照着做的修法（电脑上双击那个 `.bat`，手机上长按复制那条 `bash` 命令）。**最常见的坑是「改了配置但进程还是改之前起的那个」**：这个开关只在启动时读一次，刷新页面、重开浏览器都没用，必须把跑 ST 的那个窗口 `Ctrl+C`（电脑上直接关窗口再双击 `Start.bat`）再起一次。想确认生效没有，浏览器地址栏打开 `http://127.0.0.1:端口/proxy/https://example.com/`：能看到 example.com 的内容就是通了，看到 `CORS proxy is disabled` 就是还没生效。 |
+| `403 Forbidden`／报错写着「本机酒馆的同源转发没打开」 | `enableCorsProxy` 没开或没重启进程。这是本机 ST 的 CSRF 挡的，跟百炼无关——所以「测试连通」会弹出一句能照着做的修法：电脑上给「双击那个 `.bat`」和「用记事本改 `config.yaml` 那一行」两种改法，手机上把「跑脚本」和「一条 `sed` 直接改文件」各做成一行灰底、点一下就整行选中复制。**最常见的坑是「改了配置但进程还是改之前起的那个」**：这个开关只在启动时读一次，刷新页面、重开浏览器都没用，必须把跑 ST 的那个窗口 `Ctrl+C`（电脑上直接关窗口再双击 `Start.bat`）再起一次。想确认生效没有，浏览器地址栏打开 `http://127.0.0.1:端口/proxy/https://example.com/`：能看到 example.com 的内容就是通了，看到 `CORS proxy is disabled` 就是还没生效。 |
 | 对端真回的 403（响应是 JSON，提到 API key） | Key 不对或被禁用，跟上面那条开关无关。换 Key 或去控制台看这个 Key 有没有开通这个模型。 |
 | `400`，提到 `questions ... limit of 16` | 单批条数超过接口硬上限。默认值 16 是对的，别往大填。 |
 | 整批拒答 / `DataInspectionFailed` | 正文有露骨描写。依据来源切「LLM 摘要」。 |

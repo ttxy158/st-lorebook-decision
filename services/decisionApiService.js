@@ -423,6 +423,22 @@ export function proxyFixCommand(userAgent) {
     return `bash "$(${PROXY_FIND})"`;
 }
 
+// 不用脚本、直接把文件改了：电脑上是「打开哪个文件、改哪一行」的一句话，手机上是能整行粘的 sed。
+// 手机那句默认酒馆在 ~/SillyTavern——无 root 的 Termux 里 pkg 装的酒馆只能落在 ~ 下面，
+// 官方教程那条 git clone 建出来的也正是这个名字；装在别处的人自己换路径。
+const PROXY_MANUAL_EDIT_DESKTOP = '不想用脚本就自己改——用记事本打开酒馆根目录（就是有 server.js 和 Start.bat 的那个文件夹）里的 config.yaml，把 enableCorsProxy: false 这一行改成 true 后保存';
+const PROXY_MANUAL_EDIT_COMMAND = String.raw`sed -i 's/^enableCorsProxy.*/enableCorsProxy: true/' ~/SillyTavern/config.yaml`;
+
+/**
+ * 手机上不用脚本、直接改文件的那条命令；电脑上是用记事本改，没有命令可粘就返回空
+ * @param {string} [userAgent]
+ * @returns {string}
+ */
+export function proxyManualEditCommand(userAgent) {
+    if (!/android/i.test(readUserAgent(userAgent))) return '';
+    return PROXY_MANUAL_EDIT_COMMAND;
+}
+
 /**
  * 转发没开该怎么修——把三步全写进这句话里
  * @param {string} [userAgent] 浏览器 UA，缺省时读当前环境
@@ -432,8 +448,8 @@ export function proxyFixCommand(userAgent) {
 export function describeProxyNotEnabled(userAgent, selfCheckUrl) {
     const ua = readUserAgent(userAgent);
     const step1 = /android/i.test(ua)
-        ? `① 在 Termux 里粘这一句跑一下（它会自己找到插件里的脚本，找的过程可能要等两三秒）：${proxyFixCommand(ua)}`
-        : '① 双击插件目录里的 tools\\enable-cors-proxy.bat（它只改 config.yaml 里 enableCorsProxy 这一行，改之前先留一份 .bak）';
+        ? `① 打开这个开关有两条路。跑插件自带的脚本（它会自己找酒馆装在哪，找的过程可能要等两三秒）：${proxyFixCommand(ua)}；不跑脚本就直接改文件：${proxyManualEditCommand(ua)}（这句默认酒馆在 ~/SillyTavern，装在别处把路径换掉）`
+        : `① 双击插件目录里的 tools\\enable-cors-proxy.bat（它只改 config.yaml 里 enableCorsProxy 这一行，改之前先留一份 .bak）；${PROXY_MANUAL_EDIT_DESKTOP}`;
     const step2 = /android/i.test(ua)
         ? '② 在 Termux 里按 Ctrl+C 停掉，再跑一次 node server.js'
         : '② 关掉酒馆那个命令行窗口，重新双击 Start.bat';

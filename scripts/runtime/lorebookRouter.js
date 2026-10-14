@@ -31,6 +31,7 @@ import {
     isModerationRejection,
     isProxyNotEnabled,
     proxyFixCommand,
+    proxyManualEditCommand,
     proxySelfCheckUrl,
     mergeAnswers,
     parseAnswers,
@@ -1057,14 +1058,18 @@ export async function testDecisionConnection() {
         // 转发没开这一类值得弹窗：修法是一条命令加一个自证地址，toast 里根本没法复制
         if (isProxyNotEnabled(message)) {
             const command = proxyFixCommand();
+            const manualCommand = proxyManualEditCommand();
             const selfCheck = proxySelfCheckUrl();
             await new EDITOR.Popup(`
 <div class="wide100p padding5" style="display:flex;flex-direction:column;gap:8px;">
     <div class="justifyLeft">${escapeHtml(message)}</div>
-    ${command ? `<pre class="decision-proxy-command">${escapeHtml(command)}</pre>
-    <small class="toggle-description justifyLeft">点上面那行会整行选中，复制后粘到 Termux 里执行。</small>` : ''}
-    ${selfCheck ? `<pre class="decision-proxy-command">${escapeHtml(selfCheck)}</pre>
-    <small class="toggle-description justifyLeft">这行粘到浏览器地址栏打开，就是「重启之后到底生效了没有」的检查。</small>` : ''}
+    ${command ? `<small class="toggle-description justifyLeft">抄这一句：跑插件自带的脚本</small>
+    <pre class="decision-proxy-command">${escapeHtml(command)}</pre>` : ''}
+    ${manualCommand ? `<small class="toggle-description justifyLeft">抄这一句：不跑脚本，直接把 config.yaml 那行改掉</small>
+    <pre class="decision-proxy-command">${escapeHtml(manualCommand)}</pre>` : ''}
+    ${selfCheck ? `<small class="toggle-description justifyLeft">抄这一句：重启之后粘到浏览器地址栏打开，看看到底生效没有</small>
+    <pre class="decision-proxy-command">${escapeHtml(selfCheck)}</pre>` : ''}
+    <small class="toggle-description justifyLeft">点灰底那行会整行选中，复制后到对应的窗口里执行。</small>
 </div>
 <style>
     .decision-proxy-command { white-space: pre-wrap; word-break: break-all; user-select: all; font-size: 12px; text-align: left; padding: 6px 8px; border-radius: 4px; background: var(--SmartThemeBlurTintColor); }
