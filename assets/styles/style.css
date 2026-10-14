@@ -1,0 +1,86 @@
+/* st-lorebook-decision：只放插件自己用到的类，ST 自带的工具类（menu_button / inline-drawer / wide100p …）不重复定义 */
+
+/* 设置页里的按钮按内容宽度排，别撑成一整行（与原插件同一口径） */
+.st_ld_settings .menu_button {
+    width: fit-content;
+    display: flex;
+    gap: 10px;
+    flex-direction: row;
+}
+
+/* 只有图标、没有文字的方按钮（小眼睛、复制、重置、导入导出、齿轮那颗）：
+   酒馆自己没有这个类，是原插件自带的，分叉时漏搬过一次 */
+.button-square-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 密钥输入框和小眼睛、复制按钮排在同一行，输入框占满剩下的宽度 */
+.secret_input_row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 5px 0;
+}
+
+.secret_input_row .text_pole {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+}
+
+.secret_input_row .menu_button {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+/* 类别抽屉里的小标题（填写／勾选／数值／按钮）：只是分节的字，不是可点的折叠档。
+   设置页只允许 ①–⑥ 那一层抽屉，这里再套一层就得点三次才看到控件 */
+.dlb_group_label {
+    font-weight: bold;
+    margin: 12px 0 4px 0;
+    opacity: 0.9;
+}
+
+/* 独立成段的说明要自己占一行：酒馆给 .toggle-description 的是 inline（还带 width:max-content），
+   所以 ⑤ 里每框下面那段会和下一颗标题挤在同一行。整页统一按块排 */
+.st_ld_settings small.toggle-description {
+    display: block;
+}
+
+/* ===== 设置页长说明折叠（scripts/settings/settingHelpCollapse.js）===== */
+
+/* 收起状态：整段不占位置，点「？」时把这个类去掉就地展开。
+   用 !important 是因为有几处说明写了行内 display:block，不加权压不住 */
+.setting_help_hidden {
+    display: none !important;
+}
+
+/* 「？」按钮按小眼睛那类方按钮的口径做小，别把选项行撑高 */
+.setting_help_button {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    padding: 0;
+    margin-left: 5px;
+    font-size: 0.65rem;
+    line-height: 1;
+    opacity: 0.6;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
+/* 选项是输入框或下拉框时按钮塞不进那一行，只能贴着说明自己另起一行 */
+.setting_help_button_standalone {
+    margin: 2px 0 4px 0;
+}
+
+.setting_help_button:hover,
+.setting_help_button_open {
+    opacity: 1;
+}

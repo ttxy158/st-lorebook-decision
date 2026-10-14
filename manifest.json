@@ -1,0 +1,13 @@
+{
+    "display_name": "决策模型接管世界书",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "assets/styles/style.css",
+    "author": "ttxy158",
+    "version": "1.0.0",
+    "homePage": "https://github.com/ttxy158/st-lorebook-decision",
+    "auto_update": false,
+    "minimum_client_version": "1.13.0"
+}

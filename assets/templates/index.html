@@ -1,0 +1,503 @@
+<div class="dlb_container" id="dlb_settings_root">
+    <div class="st_ld_settings">
+        <div class="flex-container wide100p justifySpaceBetween">
+            <h4 class="standoutHeader">决策模型接管世界书</h4>
+        </div>
+        <small class="toggle-description justifyLeft">
+            每次生成前先让决策模型判一遍「哪些世界书条目本轮真的用得上」，相关的强制注入、无关的压制，中间带交回原来的关键词规则。
+            摘要和条目索引两件事走哪条通道，由第 ④ 类顶上那颗「走酒馆主 API」的勾选决定：勾上就用你写正文那套，不勾才用那一段自己填的地址／Key／模型名。
+            这一页是从底部魔法棒菜单里的「决策索引工作台」打开的，左边两页是填条目和改分类，右上角齿轮是这里。
+        </small>
+
+<!-- ① 接管与连通 -->
+<div class="inline-drawer wide100p">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>① 接管与连通</b>
+        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+    </div>
+    <div class="inline-drawer-content" style="display: none;">
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_router_enabled"><span>启用决策路由</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            开着它，每次生成前先把最近剧情和候选条目发给决策模型问一轮；关着就不问模型，世界书照原来的关键词规则注入。
+            只接管「设了关键词的普通条目」：常驻条目、你自己关掉的条目、内容里带 @@activate 的条目一律不动。
+            判定是三态——高概率即使关键词没命中也强制注入，低概率即使命中也压制，中间带交回原来的关键词规则。
+            下面那颗「允许压制低概率条目」默认关着，关着只记下哪些条目本来会被压制，并不真把它们挡在外面。
+        </small>
+        <small class="toggle-description justifyLeft" id="dlb_injection_gate_hint"></small>
+
+        <div class="dlb_group_label">填写接口地址与 Key</div>
+        <input type="text" id="dlb_api_url" class="text_pole"
+            placeholder="接口地址，例如 https://ws-xxxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1">
+        <small class="toggle-description justifyLeft">填到 <code>/v1</code> 那一段就够，插件自己补上 <code>/systemone</code>。</small>
+        <div class="secret_input_row">
+            <input type="password" id="dlb_api_key" class="text_pole"
+                placeholder="决策模型 API Key">
+            <div class="menu_button button-square-icon fa-solid fa-eye secret_reveal_button"
+                data-target="#dlb_api_key" title="查看/隐藏明文"></div>
+            <div class="menu_button button-square-icon fa-solid fa-copy secret_copy_button"
+                data-target="#dlb_api_key" title="复制到剪贴板"></div>
+        </div>
+        <small class="toggle-description justifyLeft">
+            Key 以明文保存在服务器的 settings.json 里，界面上只显示为圆点。
+            和酒馆自己保存 API Key 的做法一致：本机局域网上谁能读到这个文件、谁能打开这个页面，谁就能看到 Key。
+            清空输入框就等于删除已保存的 Key。
+        </small>
+        <input type="text" id="dlb_model" class="text_pole"
+            placeholder="模型名，默认 decision-model-preview">
+
+        <div class="dlb_group_label">调试与查看</div>
+        <div class="flex-container">
+            <div id="dlb_test_button" class="menu_button menu_button_icon">
+                <i class="fa-solid fa-plug"></i><span>测试连通</span>
+            </div>
+            <div id="dlb_view_reply_button" class="menu_button menu_button_icon">
+                <i class="fa-solid fa-comment-dots"></i><span>查看上次 LLM 回复</span>
+            </div>
+            <div id="dlb_view_report_button" class="menu_button menu_button_icon">
+                <i class="fa-solid fa-list-check"></i><span>查看本次决策依据</span>
+            </div>
+        </div>
+        <small class="toggle-description justifyLeft">
+            决策记录只存内存，刷新页面即清空。「测试连通」会按你现在的问法真发一次请求，消耗少量 token。
+        </small>
+
+        <div class="dlb_group_label">勾选</div>
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_use_proxy"><span>走 SillyTavern 的 /proxy 同源转发</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            阿里云这个端点不返回跨域许可头，浏览器直连一定会被拦，所以必须开着。
+            前提是把 config.yaml 里的 <code>enableCorsProxy</code> 设为 true 并重启 SillyTavern。
+        </small>
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_suppress_enabled"><span>允许压制低概率条目</span>
+        </div>
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_block_keyword"><span>关闭关键词触发注入</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            勾选后，判过的条目不再靠关键词命中自动注入，只有概率 ≥ 强推阈值的条目会进入提示词；中间带也不再兜底。
+            常驻条目、手动钉住（<code>@@</code>）的条目、以及本轮没拿到判定的条目（超出候选上限、模型无返回）不受影响，仍按关键词走。
+            建议先看一次「查看本次决策依据」确认强推清单够用再勾，阈值没校准时会漏掉本该在场的内容。
+            勾选后「允许压制低概率条目」对判过的条目已无意义（反正都不注入），可以不用管它。
+        </small>
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_multi_round"><span>条目太多时分多轮问完</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            只有候选条目数超过「单批上限」时这颗才起作用。
+            关闭时只问第一批，剩下的条目这次仍按关键词注入。
+            打开后分出的轮次是<b>并发</b>发的（同时几路见「并发路数」）：实测 80 条候选 = 5 轮，串行 1.15 秒，4 路并发只要 0.3~0.5 秒；总 token 不变。
+            任何一轮失败都会停下来问你，同一批里失败的轮次合并成一次询问；只要没点「按原关键词注入」，本次决策不会自己作废。
+        </small>
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_fail_silent"><span>调用失败时不再询问，直接按原关键词注入</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            不勾选时，失败弹窗有三颗按钮：<b>重试</b>（把失败的轮次再问一遍，没有次数上限）、<b>我自己挑注入条目</b>（列出本轮候选，你勾中哪些就强制注入哪些，这一轮不再问模型）、<b>按原关键词注入</b>（放弃本次决策，照常生成）。
+            回车和 ESC 走的是「按原关键词注入」，不会误点成再发一次付费请求。
+            手动勾选的结果只对本次生成有效，也不写进缓存；在世界书里<b>已关闭</b>的条目不在候选范围内，也救不回来，要用先去世界书面板打开。
+            <b>内容被对端过滤（拒答）时弹窗会多两颗</b>：<b>全部复用上轮结果</b>（拿上一次判定的分数直接用，一次请求都不发，本轮剧情不算数）和
+            <b>本轮使用正文摘要</b>（先花一次请求让 LLM 把本轮剧情改写成概括，再用它重判；只有依据来源选「正文」时才出现，因为它就是摘要档的日常做法临时做一次）。
+            超时、连不上、模型返回格式不对这些<b>不是</b>拒答，仍然只有原来那三颗。
+        </small>
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_auto_popup"><span>每轮决策跑完自动弹出结果报告</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            弹窗不会挡住生成（它在生成开始前就浮出来，你可以边等回复边看）。
+            复用上次结果的轮次不重复弹。不勾选时看聊天页底部的「决策结果」小栏，点按钮随时能翻。
+        </small>
+
+        <div class="dlb_group_label">数值</div>
+        <div class="flex-container alBaseline">
+            <label class="justifyLeft flex1">强推阈值<br><small class="toggle-description">概率 ≥ 此值就强制注入</small>
+                <input type="number" id="dlb_force_threshold" class="text_pole" min="0.5" max="0.99" step="0.01">
+            </label>
+            <label class="justifyLeft flex1">压制阈值<br><small class="toggle-description">概率 ≤ 此值才压制</small>
+                <input type="number" id="dlb_suppress_threshold" class="text_pole" min="0" max="0.8" step="0.01">
+            </label>
+        </div>
+        <div class="flex-container alBaseline">
+            <label class="justifyLeft flex1">候选上限<br><small class="toggle-description">一次最多判多少条</small>
+                <input type="number" id="dlb_max_candidates" class="text_pole" min="1" max="255" step="1">
+            </label>
+            <label class="justifyLeft flex1">单批上限<br><small class="toggle-description">一次请求塞多少条，超过就分轮（接口硬上限 16 条，填大了自动按 16 走）</small>
+                <input type="number" id="dlb_batch_size" class="text_pole" min="1" max="16" step="1">
+            </label>
+            <label class="justifyLeft flex1">并发路数<br><small class="toggle-description">分轮时同时发几路（最多 4，要给正常收发留浏览器连接）。填 1 = 一轮一轮排队</small>
+                <input type="number" id="dlb_in_flight" class="text_pole" min="1" max="4" step="1">
+            </label>
+            <label class="justifyLeft flex1">超时（毫秒）
+                <input type="number" id="dlb_timeout_ms" class="text_pole" min="2000" max="120000" step="1000">
+            </label>
+        </div>
+        <div class="flex-container alBaseline">
+            <label class="justifyLeft flex1">本轮注入条数限制<br><small class="toggle-description">概率够高的按高低排，取到这个数为止（0＝不限）。手动挑的不占名额</small>
+                <input type="number" id="dlb_inject_max_entries" class="text_pole" min="0" max="255" step="1">
+            </label>
+            <label class="justifyLeft flex1">本轮注入字数限制<br><small class="toggle-description">同一批按高低累加条目正文字数，超了就不塞（0＝不限）。最相关那条永远留</small>
+                <input type="number" id="dlb_inject_max_chars" class="text_pole" min="0" max="200000" step="500">
+            </label>
+        </div>
+        <div class="flex-container alBaseline">
+            <label class="justifyLeft flex1">复用轮数<br><small class="toggle-description">判定成功后连着几轮不再问模型（0＝每轮都问）。条目/摘要/问法一变就当场重问</small>
+                <input type="number" id="dlb_reuse_rounds" class="text_pole" min="0" max="50" step="1">
+            </label>
+        </div>
+        <small class="toggle-description justifyLeft">
+            「复用轮数」的代价说清楚：白嫖的这几轮不会重新判，剧情推进了也不会——新出场的人物不会被强推，已经退场的还留在提示词里。
+            世界书增删条目、改条目正文、重建或手填摘要、改判定问法或工作认知，都会当场作废、下一轮重新问；想立刻重判就把这个数改成 0 再生成一次。
+            选了「每 n 轮判一次」时，这个数会自动抬到不小于 n（否则间隔里那些轮没有判定，会悄悄退回关键词注入）；下面那行显示的就是生效值。
+        </small>
+        <small class="toggle-description justifyLeft" id="dlb_reuse_hint"></small>
+    </div>
+</div>
+
+<!-- ② 决策依据与时机 -->
+<div class="inline-drawer wide100p">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>② 决策依据与时机</b>
+        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+    </div>
+    <div class="inline-drawer-content" style="display: none;">
+        <div class="flex-container alBaseline">
+            <label class="justifyLeft flex1">决策依据来源
+                <select id="dlb_basis_mode" class="text_pole">
+                    <option value="chat">正文（默认：直接把最近几楼送过去）</option>
+                    <option value="summary">LLM 摘要：每轮生成后改写成一份滚动摘要</option>
+                </select>
+            </label>
+            <label class="justifyLeft flex1">决策时机
+                <select id="dlb_timing_mode" class="text_pole">
+                    <option value="every_round">每轮都判</option>
+                    <option value="every_n">每 n 轮判一次</option>
+                    <option value="manual">自主启动（我点了才判）</option>
+                </select>
+            </label>
+        </div>
+        <small class="toggle-description justifyLeft">
+            <b>正文</b>就是现行的做法：把最近几楼（含你正在输入的那句）原样拼进决策请求。它最准，但正文里的露骨描写会让决策模型整批拒答，一个判定都拿不到；
+            拒答时弹窗里可以点「本轮使用正文摘要」临时救场。<br>
+            <b>LLM 摘要</b>是每轮 AI 回复写完之后再发一次请求，把新剧情并进一份滚动摘要，下一轮决策只看这份摘要（谁在场、在哪儿、刚刚发生了什么、用户想要什么）。
+            它几乎不会被拒答，代价是<b>每轮多花一次请求</b>，而且摘要里没写下来的细节模型就判不出来。
+        </small>
+        <small class="toggle-description justifyLeft" id="dlb_basis_hint"></small>
+        <small class="toggle-description justifyLeft" id="dlb_timing_hint"></small>
+
+        <div class="dlb_group_label" id="dlb_basis_numbers_label">数值</div>
+        <div class="flex-container alBaseline">
+            <label class="justifyLeft flex1" id="dlb_every_n_wrap">间隔轮数 n<br><small class="toggle-description">「每 n 轮」时每几次生成才问一次模型</small>
+                <input type="number" id="dlb_every_n_rounds" class="text_pole" min="1" max="50" step="1">
+            </label>
+            <label class="justifyLeft flex1 dlb_basis_summary_only">摘要字数限制<br><small class="toggle-description">摘要总长控制在多少字以内，超了截断并说明</small>
+                <input type="number" id="dlb_basis_char_limit" class="text_pole" min="100" max="4000" step="50">
+            </label>
+        </div>
+
+        <div class="dlb_group_label dlb_basis_summary_only">LLM 摘要档专用的按钮</div>
+        <div class="flex-container dlb_basis_summary_only">
+            <div id="dlb_basis_view_button" class="menu_button menu_button_icon" title="看当前聊天攒到哪一段了、摘要摘要成什么样；只读内存，不发请求、不花钱">
+                <span>查看当前决策摘要</span>
+            </div>
+            <div id="dlb_basis_clear_button" class="menu_button menu_button_icon" title="删掉当前聊天的摘要，下一轮生成重新从头摘要（改了摘要提示词之后想立刻见效就点它）">
+                <span>清除当前决策摘要</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ③ 条目摘要索引与分类 -->
+<div class="inline-drawer wide100p">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>③ 条目摘要索引与分类</b>
+        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+    </div>
+    <div class="inline-drawer-content" style="display: none;">
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_index_enabled"><span>用摘要索引和分类问法判条目</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            这是默认打法：每轮生成时，条目拼给决策模型的不是正文片段，而是<b>事先摘要好的那一句</b>，并按它所属分类用<b>那一类自己的问法</b>提问
+            （问人物的「是否出场」、问设定规则的「是否在管辖范围」，本来就不是同一句话）。
+            摘要的写法是<b>先点明这是什么</b>（类型＋名字／关系），再给<b>一个主触发</b>（这一类判定问的那件事，人物就是「登场或被提及时」），最后补一句当前状态——要的是<b>这一条的用处说明</b>而不是剧情概括：决策模型拿它判断「现在要不要把这条注入进系统提示词」（注入进去就是角色扮演的背景设定或写作规范）。主触发<b>只写一个</b>：把用得上的情况一条条罗列开，只会把名字和关系挤掉。
+            摘要只影响<b>怎么问</b>：条目被强推时注入的还是完整原文，一个字都不会少。
+            <b>条目原文是补充那一档</b>：没建过索引、或者那一类没填专属问法的条目，照旧读正文片段 + 第 ⑤ 类里那条通用判定问法。关着这一档时全部条目都按正文片段判。
+            到工作台的「填写条目索引」那页去弄：自己逐条写，或在那儿点按钮让 LLM 填（发请求会消耗 token）。
+        </small>
+        <div class="flex-container">
+            <div id="dlb_index_manual_button" class="menu_button menu_button_icon" title="切到工作台第一页：逐条看原文、自己写摘要选分类（每填一条点一次保存，不发请求），那页里也有让 LLM 代填的按钮">
+                <i class="fa-solid fa-pen"></i><span>填写条目索引</span>
+            </div>
+            <div id="dlb_type_edit_button" class="menu_button menu_button_icon" title="切到工作台第二页：改分类和每一类的判定问法。点了不发请求、不花钱">
+                <i class="fa-solid fa-tags"></i><span>分类编辑</span>
+            </div>
+            <div id="dlb_index_prune_button" class="menu_button menu_button_icon" title="删掉「条目已经不在了」的索引记录（删了条目、关了世界书都会留尾巴）。不发请求">
+                <i class="fa-solid fa-broom"></i><span>清理失效项</span>
+            </div>
+            <div id="dlb_index_stats_button" class="menu_button menu_button_icon" title="每一类多少条、还差多少条没建、有多少条要清。不发请求">
+                <i class="fa-solid fa-chart-simple"></i><span>索引统计</span>
+            </div>
+        </div>
+        <small class="toggle-description justifyLeft" id="dlb_type_summary"></small>
+        <small class="toggle-description justifyLeft" id="dlb_index_stats"></small>
+
+        <div id="dlb_index_block" style="display: none;">
+            <div class="dlb_group_label">数值</div>
+            <div class="flex-container alBaseline">
+                <label class="justifyLeft flex1">条目摘要字数限制<br><small class="toggle-description">索引里每条摘要多长，也是判定时那条摘要的上限</small>
+                    <input type="number" id="dlb_index_summary_limit" class="text_pole" min="20" max="600" step="10">
+                </label>
+                <label class="justifyLeft flex1">读条目正文上限<br><small class="toggle-description">让 LLM 摘要时一条正文最多读多少字，超了只摘前半段</small>
+                    <input type="number" id="dlb_index_content_limit" class="text_pole" min="200" max="8000" step="100">
+                </label>
+            </div>
+            <div class="flex-container alBaseline">
+                <label class="justifyLeft flex1">单批字数限制<br><small class="toggle-description">一次请求最多送多少字的条目材料（标题＋关键词＋正文累计）。条数那颗是第二道硬顶，一批失败是整批记账</small>
+                    <input type="number" id="dlb_index_batch_chars" class="text_pole" min="500" max="200000" step="500">
+                </label>
+                <label class="justifyLeft flex1">单批条数上限
+                    <input type="number" id="dlb_index_batch_size" class="text_pole" min="1" max="50" step="1">
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ④ llm的使用和api自定义填写 -->
+<div class="inline-drawer wide100p">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>④ llm的使用和api自定义填写</b>
+        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+    </div>
+    <div class="inline-drawer-content" style="display: none;">
+        <div class="checkbox_label">
+            <input type="checkbox" id="dlb_llm_use_main_api"><span>让这两趟 LLM 都走酒馆主 API</span>
+        </div>
+        <small class="toggle-description justifyLeft">
+            这一颗管两件事：第 ② 类那份正文滚动摘要、第 ③ 类给条目写摘要建索引。勾上就用你写正文那套 API（地址、Key、模型跟着酒馆当前选择走），不勾才发往下面这套自定义填写。
+            摘要和分类是把条目<b>重写一遍</b>，不是抽取原文，所以要用会写概括的对话模型；决策模型那个接口只回答「是否涉及」，干不了这活。
+            世界书条目里带露骨描写时，云端模型可能整批拒答 —— 拒答的条目不会写进索引，会在结果里点名，下次点按钮会再问一遍。
+        </small>
+
+        <div class="dlb_group_label">填写预设、地址、Key、模型</div>
+        <!-- 自定义API预设：快速切换不同 API。切换只覆盖 API 参数，不动顶上那颗「走酒馆主 API」的勾选 -->
+        <div class="range-block justifyLeft"
+            style="display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 8px;">
+            <label for="dlb_custom_api_preset_select" style="margin: 0; white-space: nowrap;">API预设</label>
+            <select id="dlb_custom_api_preset_select" class="text_pole" style="width: auto; flex: 1 1 140px; margin: 0;">
+                <option value="">— 未使用预设 —</option>
+            </select>
+            <div class="menu_button menu_button_icon" id="dlb_custom_api_preset_new"
+                title="把当前 URL/模型/温度等配置存为新预设" style="margin: 0;">
+                <i class="fa-solid fa-plus"></i><span>另存为</span>
+            </div>
+            <div class="menu_button menu_button_icon" id="dlb_custom_api_preset_update"
+                title="用当前配置覆盖选中的预设" style="margin: 0;">
+                <i class="fa-solid fa-floppy-disk"></i><span>更新</span>
+            </div>
+            <div class="menu_button menu_button_icon" id="dlb_custom_api_preset_delete"
+                title="删除选中的预设" style="margin: 0;">
+                <i class="fa-solid fa-trash-can"></i><span>删除</span>
+            </div>
+            <div class="menu_button button-square-icon fa-solid fa-file-export"
+                id="dlb_custom_api_preset_export" title="导出全部预设（不含密钥）"
+                style="margin: 0;"></div>
+            <div class="menu_button button-square-icon fa-solid fa-file-import"
+                id="dlb_custom_api_preset_import" title="导入预设（密钥需重填）"
+                style="margin: 0;"></div>
+        </div>
+        <!-- 自定义API设置 -->
+        <input type="text" id="dlb_custom_api_url" class="text_pole"
+            placeholder="API URL（请以/v1结尾）">
+        <div class="secret_input_row">
+            <input type="password" id="dlb_custom_api_key" class="text_pole"
+                placeholder="API Key(多个key用逗号隔开)">
+            <div class="menu_button button-square-icon fa-solid fa-eye secret_reveal_button"
+                data-target="#dlb_custom_api_key" title="查看/隐藏明文"></div>
+            <div class="menu_button button-square-icon fa-solid fa-copy secret_copy_button"
+                data-target="#dlb_custom_api_key" title="复制到剪贴板"></div>
+        </div>
+        <input type="text" id="dlb_custom_model_name" class="text_pole"
+            placeholder="Model Name（模型名称，可手动输入或自动获取）">
+        <div class="range-block justifyLeft">
+            <select id="dlb_model_selector" class="text_pole">
+                <option value="">请先获取模型列表</option>
+            </select>
+            <div class="menu_button menu_button_icon" id="dlb_fetch_models_button">
+                <a>获取模型列表</a>
+            </div>
+            <div class="menu_button menu_button_icon" id="dlb_table_test_api_button"
+                style="margin-left: 5px;">
+                <a>测试</a>
+            </div>
+        </div>
+        <!-- 思考模式：向请求体附加各家自定义字段，用于关掉推理模型的思考 -->
+        <div class="flex-container"
+            style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+            <label for="dlb_custom_thinking_mode"
+                style="min-width: 140px; margin: 0; white-space: nowrap; flex-shrink: 0;">思考模式：</label>
+            <select id="dlb_custom_thinking_mode" class="text_pole" style="width: auto; flex: 0 1 320px; margin: 0;">
+                <option value="default">不改动（跟随模型默认）</option>
+                <option value="thinking_disabled">关闭思考 thinking{type:disabled}（阿里 Qwen / Kimi 兼容端点）</option>
+                <option value="chat_template_kwargs">关闭思考 chat_template_kwargs{enable_thinking:false}（vLLM / 硅基流动 Qwen）</option>
+                <option value="reasoning_effort_minimal">少想一点 reasoning_effort:minimal（GPT-5 / o 系列）</option>
+            </select>
+        </div>
+        <small class="toggle-description justifyLeft"
+            style="display: block; margin-bottom: 10px;">选中的字段会原样附加到请求体里。端点不认识该字段时可能被忽略、也可能报错，用「测试」按钮先验证一次。</small>
+
+        <div class="dlb_group_label">数值</div>
+        <div class="flex-container slider-container"
+            style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+            <label
+                style="min-width: 140px; margin: 0; white-space: nowrap; flex-shrink: 0;">自定义API温度设定：<span
+                    id="dlb_custom_temperature_value">1.0</span></label>
+            <input type="range" id="dlb_custom_temperature" min="0.1" max="2.0"
+                step="0.1" value="1.0" style="flex-grow: 1;">
+        </div>
+        <!-- 修复 #162/#193：自定义 API 输出 token 上限（max_tokens） -->
+        <div class="flex-container"
+            style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+            <label
+                style="min-width: 140px; margin: 0; white-space: nowrap; flex-shrink: 0;">自定义API输出上限
+                (max_tokens)：</label>
+            <input type="number" id="dlb_custom_max_tokens" class="text_pole" min="128"
+                max="128000" step="128" style="width: 160px; flex-shrink: 0;">
+            <small style="color: var(--SmartThemeEmColor);">输出 token 上限，过大或超过模型输出窗口会导致 API 报错。留空则自动使用默认值。</small>
+        </div>
+    </div>
+</div>
+
+<!-- ⑤ 提示词 -->
+<div class="inline-drawer wide100p">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>⑤ 提示词</b>
+        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+    </div>
+    <div class="inline-drawer-content" style="display: none;">
+        <small class="toggle-description justifyLeft">
+            所有能改的提示词都在这一档，每框下面那颗 ↺ 恢复默认；没带 ↺ 的那两框留空就等于用内置默认。
+        </small>
+
+        <div class="dlb_group_label">每轮拼进决策请求的四段</div>
+        <label class="justifyLeft">
+            工作认知
+            <textarea id="dlb_task_briefing"
+                class="text_pole settings_textarea wide100p" rows="5"></textarea>
+            <div class="menu_button button-square-icon fa-solid fa-undo"
+                id="dlb_reset_task_briefing" title="重置为默认" style="margin-top: 5px;"></div>
+        </label>
+        <small class="toggle-description justifyLeft">
+            这段每轮都拼在决策依据最前面，后面那几段问法都在它这个语境里被理解。想改口吻直接改框里的字，整框清空就是不要这段。
+        </small>
+        <label class="justifyLeft">
+            固定背景
+            <textarea id="dlb_state_note"
+                class="text_pole settings_textarea wide100p" rows="2"
+                placeholder="例如：现代都市日常，奇幻设定只在梦境里出现。留空则不拼"></textarea>
+            <div class="menu_button button-square-icon fa-solid fa-undo"
+                id="dlb_reset_state_note" title="清空" style="margin-top: 5px;"></div>
+        </label>
+        <small class="toggle-description justifyLeft">这里只填一句「当前场景是什么」，它会拼在每次请求的场景行里。交代任务该改上面那段「工作认知」，不是这个框。</small>
+        <label class="justifyLeft">
+            正在输入的那句的标注
+            <textarea id="dlb_pending_note"
+                class="text_pole settings_textarea wide100p" rows="1"
+                placeholder="（这句正要发出，尚未写入记录）"></textarea>
+            <div class="menu_button button-square-icon fa-solid fa-undo"
+                id="dlb_reset_pending_note" title="重置为默认" style="margin-top: 5px;"></div>
+        </label>
+        <small class="toggle-description justifyLeft">
+            点发送后那句话还没写进聊天记录，插件会把它补进上下文并打上这段标注，让模型知道这是将要发生的事。整段清空就是不要标注。
+        </small>
+        <label class="justifyLeft">
+            判定问法
+            <textarea id="dlb_instruction_template"
+                class="text_pole settings_textarea wide100p" rows="3"
+                placeholder="留空使用默认问法"></textarea>
+            <div class="menu_button button-square-icon fa-solid fa-undo"
+                id="dlb_reset_instruction_template" title="重置为默认" style="margin-top: 5px;"></div>
+        </label>
+        <small class="toggle-description justifyLeft">
+            上面三段拼在一起是模型读的依据，这一框是它拿着依据去做的事：每个条目都会被套进这句话生成一个问题，模型逐条回答。
+            占位符：<code>{digest}</code> 条目摘要，有索引时是索引里那句、没索引时是标题｜关键词｜正文；<code>{label}</code> 只取标题；
+            <code>{keys}</code> 只取关键词；<code>{content}</code> 只取正文片段。<br>
+            这句话就是模型在判断的东西，务必让它问「是否涉及/是否在场」，别问「续写需不需要」——
+            实测同一个条目两种问法差 0.45 分。留空回到默认；写了但一个占位符都没用会自动补上 <code>{digest}</code>，
+            否则所有条目问同一句话、分数全都一样。建过索引的条目走的是它那一类自己的问法，那一类的问法去工作台「分类编辑」那页改，
+            这一条只兜住没索引的条目和没写专属问法的那一类。
+        </small>
+
+        <div class="dlb_group_label dlb_basis_summary_only">摘要那一趟用的两份</div>
+        <label class="justifyLeft dlb_basis_summary_only">
+            摘要器系统提示词
+            <textarea id="dlb_basis_system_prompt"
+                class="text_pole settings_textarea wide100p" rows="3"></textarea>
+            <div class="menu_button button-square-icon fa-solid fa-undo"
+                id="dlb_reset_basis_system_prompt" title="重置为默认" style="margin-top: 5px;"></div>
+        </label>
+        <small class="toggle-description justifyLeft dlb_basis_summary_only">它交代那个模型「输出不是给人读的，是给另一个只看概括的判别模型当依据」。留空等于用内置默认。</small>
+        <label class="justifyLeft dlb_basis_summary_only">
+            摘要改写指令
+            <textarea id="dlb_basis_template"
+                class="text_pole settings_textarea wide100p" rows="6"></textarea>
+            <div class="menu_button button-square-icon fa-solid fa-undo"
+                id="dlb_reset_basis_template" title="重置为默认" style="margin-top: 5px;"></div>
+        </label>
+        <small class="toggle-description justifyLeft dlb_basis_summary_only">
+            占位符：<code>{old}</code> 已有摘要、<code>{new}</code> 本轮新增剧情、<code>{limit}</code> 摘要字数限制。
+            这份摘要只喂给决策模型当依据，<b>不会拼进你写正文那套提示词</b>。
+            要它「收敛到做了什么／想要这一层、别复述露骨细节」是能不能不被拒答的关键，改的时候留住这句。
+            没写 <code>{new}</code> 会自动补在末尾。
+        </small>
+
+        <div class="dlb_group_label dlb_index_prompts_only">给条目写摘要建索引用的两份</div>
+        <label class="justifyLeft dlb_index_prompts_only">
+            条目摘要器系统提示词
+            <textarea id="dlb_index_system_prompt" class="text_pole settings_textarea wide100p" rows="2" placeholder="留空使用内置默认"></textarea>
+        </label>
+        <label class="justifyLeft dlb_index_prompts_only">
+            条目摘要改写指令
+            <textarea id="dlb_index_template" class="text_pole settings_textarea wide100p" rows="8" placeholder="留空使用内置默认"></textarea>
+        </label>
+        <small class="toggle-description justifyLeft dlb_index_prompts_only">
+            占位符：<code>{types}</code> 分类清单、<code>{count}</code> 本批条数、<code>{entries}</code> 编号+标题+关键词+正文、
+            <code>{limit}</code> 条目摘要字数限制、<code>{otherName}</code>「其他」那一类的名字。<br>
+            模板里漏了 <code>{entries}</code> 会自动补在末尾并提醒一次 —— 不然等于没把条目喂给模型，白发一次请求。
+            内置默认里已经写了开头的<b>【这份索引之后怎么用】</b>（先让模型建立认知：这句是给「要不要注入这条」的判定读的，不是剧情概括）、中间「先点明这是什么，再给一个主触发，主触发只写一个」和「露骨描写照实概括，这是在给检索做标注」，自己改时别把这几段删掉——尤其开头那段，删了模型就只会写概括。
+        </small>
+    </div>
+</div>
+
+<!-- ⑥ 正文/条目作为参考时 -->
+<div class="inline-drawer wide100p">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>⑥ 正文/条目作为参考时</b>
+        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+    </div>
+    <div class="inline-drawer-content" style="display: none;">
+        <div class="dlb_group_label">数值</div>
+        <small class="toggle-description justifyLeft">
+            这里说的「条数」都按聊天楼层算：你发的和 AI 回的混在一起数，一问一答就是 2 条；系统消息不算。
+        </small>
+        <div class="flex-container alBaseline">
+            <label class="justifyLeft flex1">聊天参考条数<br><small class="toggle-description">拼进去的最近消息条数（本次输入另算）</small>
+                <input type="number" id="dlb_context_messages" class="text_pole" min="1" max="20" step="1">
+            </label>
+            <label class="justifyLeft flex1">上下文字数限制<br><small class="toggle-description">超出「消息保留完整字数条数」的消息每条带多少字</small>
+                <input type="number" id="dlb_context_chars" class="text_pole" min="50" max="4000" step="50">
+            </label>
+            <label class="justifyLeft flex1">消息保留完整字数条数<br><small class="toggle-description">末尾几条整段带过去、不截字数（1＝最新那条完整；0＝每条都截）</small>
+                <input type="number" id="dlb_context_full_messages" class="text_pole" min="0" max="20" step="1">
+            </label>
+            <label class="justifyLeft flex1">条目采用字数限制<br><small class="toggle-description">每条带多少字正文（没建索引的条目才走这个）</small>
+                <input type="number" id="dlb_digest_limit" class="text_pole" min="40" max="600" step="10">
+            </label>
+        </div>
+    </div>
+</div>
+    </div>
+</div>
