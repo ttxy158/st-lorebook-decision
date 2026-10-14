@@ -34,7 +34,7 @@ https://github.com/ttxy158/st-lorebook-decision
 国内直连 GitHub 不通的话换这个（同一份代码的镜像，手动同步，可能比 GitHub 晚一点）：
 
 ```
-https://gitee.com/txytxy/st-lorebook-decision
+https://gitee.com/txyttxy/st-lorebook-decision
 ```
 
 ⚠️ 这一步是**酒馆在你电脑上执行 `git clone`**，不是你浏览器下载网页，所以「GitHub 我打得开啊」和「装不上」可以同时成立——git 用的是另一套代理设置。报 `Internal Server Error` 就去酒馆那个命令行窗口找 `Importing extension failed` 那行，十有八九是 `Connection was reset`：换上面那个 Gitee 地址，或者给 git 单独配一次代理（`git config --global http.https://github.com.proxy http://127.0.0.1:代理端口`，撤销用 `--global --unset` 同一路径）。
@@ -62,7 +62,7 @@ data/default-user/extensions/st-lorebook-decision
 - **推荐仍用方式一**（在浏览器里的 ST 界面粘贴仓库地址让它自己装），手机上这个入口和电脑上一样，全程不用碰路径。
 - 非要手动放：`git clone` 到扩展目录下（`github.com` 那个不通就换下面这个 Gitee 地址，两条命令除地址外一样）。
   ```
-  git clone https://gitee.com/txytxy/st-lorebook-decision ~/SillyTavern/data/default-user/extensions/st-lorebook-decision
+  git clone https://gitee.com/txyttxy/st-lorebook-decision ~/SillyTavern/data/default-user/extensions/st-lorebook-decision
   ```
   酒馆装在别处就把前面的 `~/SillyTavern` 换成你的目录。
 - 装完重启 ST 进程：跑着 `StartServer.sh` 的那个 Termux 窗口按 `Ctrl+C` 停掉，再重新执行一次启动命令。
