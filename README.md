@@ -149,7 +149,7 @@ data/default-user/extensions/st-lorebook-decision
 | 现象 | 原因 |
 | --- | --- |
 | 「安装扩展」报 `Internal Server Error` | 酒馆自己跑 `git clone` 失败了，跟插件无关。看命令行窗口那行 `Importing extension failed`：`Connection was reset` 就是直连 GitHub 不通，换 Gitee 地址或给 git 配代理。 |
-| `403 Forbidden`／报错写着「本机酒馆的同源转发没打开」 | `enableCorsProxy` 没开或没重启进程。这是本机 ST 的 CSRF 挡的，跟百炼无关——所以「测试连通」会弹出一句能照着做的修法（电脑上双击那个 `.bat`，手机上长按复制那条 `bash` 命令）。改完还是 403，就确认你重启的是 ST **进程**，不是刷新页面。 |
+| `403 Forbidden`／报错写着「本机酒馆的同源转发没打开」 | `enableCorsProxy` 没开或没重启进程。这是本机 ST 的 CSRF 挡的，跟百炼无关——所以「测试连通」会弹出一句能照着做的修法（电脑上双击那个 `.bat`，手机上长按复制那条 `bash` 命令）。**最常见的坑是「改了配置但进程还是改之前起的那个」**：这个开关只在启动时读一次，刷新页面、重开浏览器都没用，必须把跑 ST 的那个窗口 `Ctrl+C`（电脑上直接关窗口再双击 `Start.bat`）再起一次。想确认生效没有，浏览器地址栏打开 `http://127.0.0.1:端口/proxy/https://example.com/`：能看到 example.com 的内容就是通了，看到 `CORS proxy is disabled` 就是还没生效。 |
 | 对端真回的 403（响应是 JSON，提到 API key） | Key 不对或被禁用，跟上面那条开关无关。换 Key 或去控制台看这个 Key 有没有开通这个模型。 |
 | `400`，提到 `questions ... limit of 16` | 单批条数超过接口硬上限。默认值 16 是对的，别往大填。 |
 | 整批拒答 / `DataInspectionFailed` | 正文有露骨描写。依据来源切「LLM 摘要」。 |

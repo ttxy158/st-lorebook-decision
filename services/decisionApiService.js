@@ -375,13 +375,22 @@ export const PROXY_NOT_ENABLED_HEAD = '本机酒馆的同源转发没打开';
 // 跳过 node_modules／.git／storage：前两者又大又慢，storage 是软链接到共享存储、几万个文件白扫一遍。
 const PROXY_FIND = String.raw`find ~ \( -type d \( -name node_modules -o -name .git -o -name storage \) -prune \) -o \( -type f -path '*/st-lorebook-decision/tools/enable-cors-proxy.sh' -print \) 2>/dev/null | head -n1`;
 
-// enableCorsProxy 为 false 时，酒馆的 CSRF 中间件排在 /proxy 路由前面，POST 在半路就被本机挡下，
-// 回的是一整页 Express 默认错误页；而百炼的错误一律是 JSON（实测 401 {"error":…}、400 {"code":"DataInspectionFailed"…}）。
-// 所以「状态 403 + 响应体是 HTML」这两条合起来足够把「自家转发没开」和「对端拒绝」分开。
+// 酒馆在开关关着时，把 /proxy 换成一个只会回 404 + 这句话的占位处理器
+// （1.17 与 1.19 的 src/server-main.js 里逐字相同）。请求带上 CSRF 令牌后就不会再被半路的 CSRF 中间件挡下，
+// 所以「没开」能拿到这句明确的话，不用再靠「403 + 一整页 HTML」去猜。
+export const PROXY_DISABLED_SENTENCE = 'CORS proxy is disabled';
+
+// 自证地址：浏览器直接打开它，看到 example.com 的内容就是通了；看到上面那句话就是还没生效。
+export const PROXY_SELF_CHECK_PATH = '/proxy/https://example.com/';
+
 const HTML_PAGE_MARKERS = ['<!doctype', '<html', '<body'];
 
 function readUserAgent(userAgent) {
     return String(userAgent ?? (typeof navigator !== 'undefined' ? navigator?.userAgent : '') ?? '');
+}
+
+function readOrigin(origin) {
+    return String(origin ?? (typeof location !== 'undefined' ? location?.origin : '') ?? '');
 }
 
 /**
@@ -395,6 +404,16 @@ export function isHtmlErrorPage(text) {
 }
 
 /**
+ * 自证用的同源地址；拿不到当前站点就返回空
+ * @param {string} [origin]
+ * @returns {string}
+ */
+export function proxySelfCheckUrl(origin) {
+    const base = readOrigin(origin);
+    return base ? base + PROXY_SELF_CHECK_PATH : '';
+}
+
+/**
  * 手机上能直接粘贴执行的那条命令；电脑上给的是双击，没有命令可复制就返回空
  * @param {string} [userAgent]
  * @returns {string}
@@ -405,16 +424,52 @@ export function proxyFixCommand(userAgent) {
 }
 
 /**
- * 转发没开该怎么修——一句人话加修法
+ * 转发没开该怎么修——把三步全写进这句话里
  * @param {string} [userAgent] 浏览器 UA，缺省时读当前环境
+ * @param {string} [selfCheckUrl] 自证地址，缺省时读当前站点
  * @returns {string}
  */
-export function describeProxyNotEnabled(userAgent) {
+export function describeProxyNotEnabled(userAgent, selfCheckUrl) {
     const ua = readUserAgent(userAgent);
-    const fix = /android/i.test(ua)
-        ? `在 Termux 里粘这一句跑一下（它会自己找到插件里的脚本，找的过程可能要等两三秒）：${proxyFixCommand(ua)}，跑完重启酒馆。`
-        : '双击插件目录里的 tools\\enable-cors-proxy.bat，然后重启酒馆。';
-    return `${PROXY_NOT_ENABLED_HEAD}，请求还没发出去就被酒馆自己挡下了（不是接口地址或 Key 的问题）。${fix}`;
+    const step1 = /android/i.test(ua)
+        ? `① 在 Termux 里粘这一句跑一下（它会自己找到插件里的脚本，找的过程可能要等两三秒）：${proxyFixCommand(ua)}`
+        : '① 双击插件目录里的 tools\\enable-cors-proxy.bat（它只改 config.yaml 里 enableCorsProxy 这一行，改之前先留一份 .bak）';
+    const step2 = /android/i.test(ua)
+        ? '② 在 Termux 里按 Ctrl+C 停掉，再跑一次 node server.js'
+        : '② 关掉酒馆那个命令行窗口，重新双击 Start.bat';
+    const url = readOrigin(selfCheckUrl) ? proxySelfCheckUrl(selfCheckUrl) : '';
+    const step3 = url
+        ? `③ 想确认到底生效没有：浏览器地址栏打开 ${url}，看到 example.com 的网页内容就是通了；看到「${PROXY_DISABLED_SENTENCE}」就是还没生效。`
+        : '';
+    return `${PROXY_NOT_ENABLED_HEAD}：请求还没发出去就被本机酒馆挡下了（不是接口地址或 Key 的问题）。`
+        + `${step1}。这个开关只在进程启动时读一次，改完不重启等于没改，刷新页面没用——${step2}。${step3}`;
+}
+
+/**
+ * 这个响应码加响应体，是不是「本机转发没开」的回执
+ * @param {number} status
+ * @param {string} text 响应体
+ * @returns {boolean}
+ */
+export function isProxyNotEnabledResponse(status, text) {
+    if (Number(status) === 404 && String(text ?? '').includes(PROXY_DISABLED_SENTENCE)) return true;
+    // 令牌没拿到（老酒馆、跨用户页）时仍会撞上半路的 CSRF 错误页：状态 403 加一整页 HTML。
+    // 对端的错误一律是 JSON（实测 401 {"error":…}、400 {"code":"DataInspectionFailed"…}），不会误判。
+    return Number(status) === 403 && isHtmlErrorPage(text);
+}
+
+/**
+ * 取本页的 CSRF 令牌：走 /proxy 时它是同源请求，开关关着时会被酒馆的 CSRF 中间件先挡下
+ * @returns {Promise<string>} 拿不到就返回空串，请求照发
+ */
+async function fetchCsrfToken() {
+    try {
+        const response = await fetch('/csrf-token');
+        const text = await response.text();
+        return String(JSON.parse(text)?.token ?? '');
+    } catch (error) {
+        return '';
+    }
 }
 
 /**
@@ -436,19 +491,26 @@ export async function requestDecision({ endpoint, apiKey = '', model = DECISION_
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 15000));
     try {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        };
+        // 开关关着时 CSRF 中间件排在 /proxy 前面，不带令牌的 POST 会被本机挡下、回一整页 HTML，
+        // 就只能靠猜。带上令牌后请求能走到 /proxy 本身，没开时拿到的是酒馆自己那句 404。
+        if (useProxy) {
+            const csrfToken = await fetchCsrfToken();
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        }
         const response = await fetch(url, {
             method: 'POST',
             signal: controller.signal,
-            headers: {
-                'Content-Type': 'application/json',
-                ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-            },
+            headers,
             body: JSON.stringify({ model, state, questions }),
         });
         const text = await response.text();
         if (!response.ok) {
-            if (useProxy && response.status === 403 && isHtmlErrorPage(text)) {
-                throw new Error(`决策模型返回 HTTP 403：${describeProxyNotEnabled()}`);
+            if (useProxy && isProxyNotEnabledResponse(response.status, text)) {
+                throw new Error(`决策模型返回 HTTP ${response.status}：${describeProxyNotEnabled()}`);
             }
             throw new Error(`决策模型返回 HTTP ${response.status}：${text.slice(0, 200)}`);
         }

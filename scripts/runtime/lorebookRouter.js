@@ -31,6 +31,7 @@ import {
     isModerationRejection,
     isProxyNotEnabled,
     proxyFixCommand,
+    proxySelfCheckUrl,
     mergeAnswers,
     parseAnswers,
     applyInjectQuota,
@@ -1053,14 +1054,17 @@ export async function testDecisionConnection() {
     } catch (error) {
         console.error('[决策路由] 测试失败', error);
         const message = String(error?.message || error);
-        // 转发没开这一类值得弹窗：修法是一条命令，toast 里根本没法复制
+        // 转发没开这一类值得弹窗：修法是一条命令加一个自证地址，toast 里根本没法复制
         if (isProxyNotEnabled(message)) {
             const command = proxyFixCommand();
+            const selfCheck = proxySelfCheckUrl();
             await new EDITOR.Popup(`
 <div class="wide100p padding5" style="display:flex;flex-direction:column;gap:8px;">
     <div class="justifyLeft">${escapeHtml(message)}</div>
     ${command ? `<pre class="decision-proxy-command">${escapeHtml(command)}</pre>
-    <small class="toggle-description justifyLeft">点上面那行会整行选中，复制后粘到 Termux 里执行，跑完重启酒馆。</small>` : ''}
+    <small class="toggle-description justifyLeft">点上面那行会整行选中，复制后粘到 Termux 里执行。</small>` : ''}
+    ${selfCheck ? `<pre class="decision-proxy-command">${escapeHtml(selfCheck)}</pre>
+    <small class="toggle-description justifyLeft">这行粘到浏览器地址栏打开，就是「重启之后到底生效了没有」的检查。</small>` : ''}
 </div>
 <style>
     .decision-proxy-command { white-space: pre-wrap; word-break: break-all; user-select: all; font-size: 12px; text-align: left; padding: 6px 8px; border-radius: 4px; background: var(--SmartThemeBlurTintColor); }

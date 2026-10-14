@@ -38,7 +38,7 @@ function toFactory(path, deps) {
 // ============================================================ 1. 请求层（无依赖，直接跑真代码）
 console.log('===== 1. decisionApiService =====');
 const svc = toFactory('services/decisionApiService.js', {
-    __exports: ['DECISION_DEFAULT_MODEL', 'DECISION_MAX_QUESTIONS', 'DECISION_MAX_IN_FLIGHT', 'DEFAULT_INSTRUCTION_TEMPLATE', 'DEFAULT_PENDING_NOTE', 'DEFAULT_DECISION_TASK_BRIEFING', 'DEFAULT_BASIS_SYSTEM_PROMPT', 'DEFAULT_BASIS_TEMPLATE', 'resolveTaskBriefing', 'renderInstruction', 'entryTitle', 'buildEntryDigest', 'buildQuestions', 'buildState', 'buildDigestState', 'isModerationRejection', 'isHtmlErrorPage', 'proxyFixCommand', 'describeProxyNotEnabled', 'isProxyNotEnabled', 'PROXY_NOT_ENABLED_HEAD', 'chunk', 'mergeAnswers', 'parseAnswers', 'applyInjectQuota', 'resolveEndpoint', 'requestDecision'],
+    __exports: ['DECISION_DEFAULT_MODEL', 'DECISION_MAX_QUESTIONS', 'DECISION_MAX_IN_FLIGHT', 'DEFAULT_INSTRUCTION_TEMPLATE', 'DEFAULT_PENDING_NOTE', 'DEFAULT_DECISION_TASK_BRIEFING', 'DEFAULT_BASIS_SYSTEM_PROMPT', 'DEFAULT_BASIS_TEMPLATE', 'resolveTaskBriefing', 'renderInstruction', 'entryTitle', 'buildEntryDigest', 'buildQuestions', 'buildState', 'buildDigestState', 'isModerationRejection', 'isHtmlErrorPage', 'proxyFixCommand', 'proxySelfCheckUrl', 'describeProxyNotEnabled', 'isProxyNotEnabled', 'isProxyNotEnabledResponse', 'PROXY_NOT_ENABLED_HEAD', 'PROXY_DISABLED_SENTENCE', 'PROXY_SELF_CHECK_PATH', 'chunk', 'mergeAnswers', 'parseAnswers', 'applyInjectQuota', 'resolveEndpoint', 'requestDecision'],
     fetch: (...args) => globalThis.__fakeFetch(...args),
     AbortController: globalThis.AbortController,
     setTimeout: globalThis.setTimeout,
@@ -273,8 +273,9 @@ truthy('空地址直接抛错', threwEmpty);
 
 // ---- 传输层：假 fetch
 async function captureFetch(impl) {
-    const seen = {};
+    const seen = { urls: [] };
     globalThis.__fakeFetch = async (url, options) => {
+        seen.urls.push(url);
         seen.url = url;
         seen.options = options;
         return impl(url, options);
@@ -351,6 +352,47 @@ truthy('转发没开这一类认得出来', svc.isProxyNotEnabled(`决策模型�
 check('拒答不算转发没开', svc.isProxyNotEnabled(MODERATED), false);
 check('超时不算转发没开', svc.isProxyNotEnabled('决策模型请求超时（15 秒）'), false);
 check('空值不炸', svc.isProxyNotEnabled(undefined), false);
+
+// ---- 走 /proxy 时带上本页的 CSRF 令牌：这样「开关没开」能拿到酒馆自己那句 404，而不是半路的 403 猜谜
+const ST_DISABLED_404 = 'CORS proxy is disabled. Enable it in config.yaml or use the --corsProxy flag.';
+truthy('404 + 酒馆那句原话 → 判定为没开', svc.isProxyNotEnabledResponse(404, ST_DISABLED_404));
+check('404 + 别的内容不算', svc.isProxyNotEnabledResponse(404, 'Cannot POST /proxy/https://a/v1/systemone'), false);
+truthy('403 + 一整页 HTML 仍然算（令牌没拿到的老路子）', svc.isProxyNotEnabledResponse(403, EXPRESS_403));
+check('403 + JSON（对端真的拒绝）不算', svc.isProxyNotEnabledResponse(403, '{"error":{"message":"Incorrect API key provided."}}'), false);
+check('状态码不对就不算（500 回一堆 HTML 也不误判）', svc.isProxyNotEnabledResponse(500, EXPRESS_403), false);
+check('空值不炸', svc.isProxyNotEnabledResponse(undefined, undefined), false);
+check('自证地址就是当前站点加一条固定路径',
+    svc.proxySelfCheckUrl('http://127.0.0.1:8000'), 'http://127.0.0.1:8000/proxy/https://example.com/');
+
+cap = await captureFetch((url) => (url === '/csrf-token'
+    ? okJson({ token: 'tok-abc' })
+    : okJson({ answers: { q0: { noul: 0.9 } } })));
+check('走转发时先取本页 CSRF 令牌', cap.seen.urls, ['/csrf-token', '/proxy/https://a/v1/systemone']);
+check('决策请求带上令牌头', cap.seen.options.headers['X-CSRF-Token'], 'tok-abc');
+check('Bearer 认证头没被挤掉', cap.seen.options.headers.Authorization, 'Bearer sk-test');
+cap = await captureFetch((url) => (url === '/csrf-token'
+    ? (() => { throw new Error('network down'); })()
+    : okJson({ answers: { q0: { noul: 0.9 } } })));
+check('取不到令牌也照发请求（不因此整个不判）', cap.result?.answers?.q0?.noul, 0.9);
+check('取不到令牌时就不带那个头', cap.seen.options.headers['X-CSRF-Token'], undefined);
+cap = await captureFetch(() => ({ ok: false, status: 404, text: async () => ST_DISABLED_404 }));
+truthy('404 + 那句原话 → 同样说人话', /本机酒馆的同源转发没打开/.test(cap.error?.message || ''));
+check('这种回执不算「内容被过滤」', svc.isModerationRejection(cap.error?.message || ''), false);
+
+// 提示里必须自带完整三步：改哪里、非重启不可、怎么自证
+const DESKTOP_HINT = svc.describeProxyNotEnabled(WINDOWS_UA, 'http://127.0.0.1:8000');
+truthy('写了改哪个文件（.bat）', /enable-cors-proxy\.bat/.test(DESKTOP_HINT));
+truthy('写了不重启等于没改', /重启/.test(DESKTOP_HINT) && /只在进程启动时读一次/.test(DESKTOP_HINT));
+truthy('写了刷新页面没用（他就是栽在这一步：改了配置但进程是改之前起的）', /刷新页面没用/.test(DESKTOP_HINT));
+truthy('写了自证地址', DESKTOP_HINT.includes(svc.proxySelfCheckUrl('http://127.0.0.1:8000')));
+truthy('自证那句说清两种结果各代表什么', /example\.com/.test(DESKTOP_HINT) && DESKTOP_HINT.includes(svc.PROXY_DISABLED_SENTENCE));
+const PHONE_HINT = svc.describeProxyNotEnabled(ANDROID_UA, 'http://127.0.0.1:8080');
+truthy('手机上第①步是 Termux 那句命令', PHONE_HINT.includes(svc.proxyFixCommand(ANDROID_UA)));
+truthy('手机上第②步是 Ctrl+C 再起服务', /Ctrl\+C/.test(PHONE_HINT) && /node server\.js/.test(PHONE_HINT));
+check('手机上不提电脑上的双击', /\.bat/.test(PHONE_HINT), false);
+check('拿不到当前站点时不硬凑自证地址', /浏览器地址栏/.test(svc.describeProxyNotEnabled(WINDOWS_UA, '')), false);
+truthy('转发没开这一类还是认得出来（换了 404 也一样）', svc.isProxyNotEnabled(`决策模型返回 HTTP 404：${DESKTOP_HINT}`));
+check('空值不炸', svc.proxySelfCheckUrl(undefined), '');
 
 // ============================================================ 1.5 密钥可用性校验
 console.log('\n===== 1.5 isUsableSecret =====');
